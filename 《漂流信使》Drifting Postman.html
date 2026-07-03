@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>漂流信使 | Drifting Postman</title>
+<style>
+:root { --gold: #f0c878; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a1628;font-family:'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;overflow:hidden;height:100vh;width:100vw;user-select:none;-webkit-user-select:none;touch-action:none}
+#wrap{position:relative;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
+canvas{display:block;border-radius:4px;cursor:pointer}
+#hud{position:absolute;top:10px;left:14px;right:14px;display:flex;justify-content:space-between;align-items:center;pointer-events:none;z-index:25}
+.hu{color:var(--gold);font-size:14px;background:rgba(10,22,40,0.75);padding:6px 14px;border-radius:16px}
+#lang-btn{pointer-events:auto;cursor:pointer;border:1px solid rgba(240,200,120,0.3)}
+#lang-btn:hover{border-color:var(--gold);background:rgba(240,200,120,0.15)}
+#overlay{position:absolute;inset:0;z-index:20;display:none;align-items:center;justify-content:center;background:rgba(5,10,20,0.78);backdrop-filter:blur(4px)}
+#overlay.on{display:flex}
+.panel{background:linear-gradient(180deg,#162035,#0f1a2a);border:1px solid rgba(240,200,120,0.25);border-radius:18px;padding:26px 28px;max-width:480px;width:92%;text-align:center;color:#e8d5b0;box-shadow:0 8px 40px rgba(0,0,0,0.5);animation:pi 0.5s ease-out;max-height:85vh;overflow-y:auto}
+@keyframes pi{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+.panel h2{color:var(--gold);font-size:20px;margin-bottom:10px}
+.panel p{font-size:15px;line-height:1.9;margin:8px 0;color:#c8c0b0}
+.panel .sub{color:#8a7040;font-size:12px;margin-bottom:8px}
+.panel .btns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:14px}
+.panel button{background:rgba(240,200,120,0.1);color:var(--gold);border:1px solid rgba(240,200,120,0.3);border-radius:22px;padding:10px 22px;font-size:14px;cursor:pointer;font-family:inherit;transition:all 0.3s}
+.panel button:hover{background:rgba(240,200,120,0.25);border-color:var(--gold)}
+.panel button.big{background:rgba(240,200,120,0.2);border-color:var(--gold);font-size:16px;padding:14px 32px}
+.panel .hint{color:#706850;font-size:12px;margin-top:10px}
+.panel .nm{color:var(--gold);font-size:15px;margin-bottom:4px}
+.panel .pr{color:#90c8b8;font-size:14px;font-style:italic;margin:10px 0;padding:8px 14px;background:rgba(100,180,160,0.08);border-radius:10px}
+.panel .lt{font-size:15px;line-height:2;color:#e0d5c0;text-align:left;padding:0 4px}
+
+#fish-wrap{position:absolute;bottom:18%;left:50%;transform:translateX(-50%);z-index:15;display:none;text-align:center;pointer-events:none}
+#fish-wrap.on{display:block}
+#fish-p{color:var(--gold);font-size:16px;margin-bottom:6px;animation:pulse 1.5s ease-in-out infinite}
+#fish-o{width:200px;height:26px;background:rgba(255,255,255,0.06);border-radius:13px;overflow:hidden;border:2px solid rgba(240,200,120,0.2);position:relative}
+#fish-bg{height:100%;background:linear-gradient(90deg,#3a5a2a,#7a9a40,#f0c878,#7a9a40,#3a5a2a);border-radius:11px;width:100%}
+#fish-m{position:absolute;top:-4px;width:20px;height:32px;background:rgba(255,255,255,0.9);border-radius:3px;box-shadow:0 0 12px rgba(255,255,255,0.5);transition:left 0.04s}
+#fish-z{position:absolute;top:3px;bottom:3px;background:rgba(240,200,120,0.45);border-radius:3px;box-shadow:0 0 10px rgba(240,200,120,0.4)}
+@keyframes pulse{0%,100%{opacity:0.5}50%{opacity:1}}
+
+#gate{position:absolute;top:55px;left:50%;transform:translateX(-50%);z-index:12;pointer-events:none;display:none;color:#ffb060;font-size:14px;font-weight:600;background:rgba(180,80,20,0.25);padding:8px 18px;border-radius:16px;border:1px solid rgba(255,160,60,0.3);animation:pulse 1.2s ease-in-out infinite}
+</style>
+</head>
+<body>
+<div id="wrap">
+<canvas id="c"></canvas>
+<div id="hud"><span class="hu" id="h1">📮 已送达: 0</span><span class="hu" id="h2">🌤️ 上午</span><span class="hu" id="lang-btn" onclick="toggleLang();event.stopPropagation()">🌐 EN</span></div>
+<div id="gate">⚠️ 请先靠岸与岛民对话，再继续收集信件</div>
+<div id="fish-wrap"><div id="fish-p">🎣 按空格收线！</div><div id="fish-o"><div id="fish-bg"></div><div id="fish-z"></div><div id="fish-m"></div></div></div>
+<div id="overlay"><div class="panel" id="panel"></div></div>
+</div>
+<script>
+// ============================================================
+const L={zh:{
+ title:'漂流信使',sub:'Drifting Postman',
+ intro:['你叫林渡。英语专业，大四。\n寝室里堆着四年的读书笔记——华兹华斯、叶芝、弗罗斯特。\n你曾经相信，语言是世界上最结实的桥。',
+ '然后AI来了。\n起初只是新闻——「翻译软件又升级了」。\n然后是招聘会——以前抢着要英语系毕业生的出版社，今年只招两个。\n再然后——你听说隔壁班一个同学，翻译了半年的书稿，AI两小时就做完了。',
+ '那天晚上你给妈妈打了一个电话。\n你没说什么——只是一直哭。\n你说：妈，我学了四年，好像都白学了。\n电话那头沉默了很久。她说：「那就先回来吃饭。」',
+ '你挂了电话，坐在床上。\n桌上摊着翻烂的华兹华斯——你背过书里每一首诗。\n但现在它们轻得像纸片——风一吹就散了。\n你不知道明天的自己该往哪里走。',
+ '后来有一天，你梦见了一片海。\n海上漂着很多信——字迹歪歪扭扭，逻辑混乱。\n但每一封都在说同一句话：请把我送到对的人手里。\nAI读不懂这些。但你可以。',
+ '你醒了。发现自己站在一艘小船上。\n远方有金色的光点在闪烁——\n那是AI读不懂的，等待被读懂的人心。'],
+
+
+ go:'✨ 启 航 ✨',goHint:'👆 点击按钮 或 按 空格/Enter',tut:'🧭 WASD/方向键 航行 | 靠近金色信件按空格捞取 | 读完选择送达方向',
+ hL:'📮 已送达',hT:['🌙 深夜','☀️ 清晨','🌤️ 上午','☀️ 午后','🌅 黄昏'],
+ fH:'🎣 按空格开始——看准黄色区域',fP:'🎣 标记进入黄色区域时，按空格收线！',fM:'差一点……信漂走了。',fG:'✨ 捞到了！',
+ dQ:'📍 这封信该送往哪个方向？\n（仔细读信——方向线索藏在文字里）',
+ dN:'⬆️ 北 · 寒冷之地',dS:'⬇️ 南 · 温暖之地',dE:'➡️ 东 · 日出之地',dW:'⬅️ 西 · 日落之地',
+ dOK:'✅ 送对了。信会穿越这片海，抵达它该去的地方。',dNO:'🤔 信被退回了……再读一遍文字里的线索。',dRetry:'方向不对。再读一遍信，重新选择方向。',
+ iH:'🏝️ 按空格靠岸',iT:'🏝️ 靠岸',iC:'（点击继续）',iR:'你想说什么？',
+ gate:'⚠️ 有岛民在等你——先靠岸聊聊，才能继续收信',
+ near:'📮 最近的信',
+ endT:'🌅 暮色降临',
+ endL:['今天，你送达了 {n} 封信。','','每一封都是用不标准的语法、不完美的措辞——','写着只有人类才写得出的句子。','','AI 可以翻译一切——但它读不懂，','这些词背后站着什么样的人。','','而你可以。','因为你是英语系的学生。','你学的不只是语言——你学的是别人的人生。','','这就是你站在这片海上的理由。','','——《漂流信使》'],
+ replay:'🔄 再次启航',
+ ltr:[
+  {f:'渔夫 · 智利 · 瓦尔帕莱索',t:"今天的海是紫色的。捕了三条沙丁鱼。Maria说再不写信就把船卖掉。她说那边的海比这里更冷——帮我把信带给她吧。",d:'n',h:'那边的海更冷——往哪边走更冷？'},
+  {f:'孙女 · 日本 · 京都',t:"樱花开早了十天。奶奶去年还能认出我，今年不能了。医生说慢慢来——可花不等人。姐姐在比我更早看到日出的城市——帮我把这封信带给她。趁花还在，回来一趟。",d:'e',h:'更早看到日出的城市——在哪边？'},
+  {f:'面包师 · 挪威 · 特罗姆瑟',t:"极夜已经四十天了。我学会了肉桂面包。邻居说我挪威语进步了——他只是客气。这里冷得连呼吸都冻住。帮我把信寄到有夏天的地方去吧。",d:'s',h:'有夏天的地方——在哪边？'},
+  {f:'打工仔 · 埃及 · 开罗',t:"骆驼还是臭。但金字塔变成金色的时候，一切都值了。我攒够了钱——明年就回家。家在太阳落下去的方向。",d:'w',h:'太阳落下去的方向——是哪边？'},
+  {f:'威尼斯人 · 意大利 · 威尼斯',t:"水位又涨了。San Marco广场水没过脚踝。在这座慢慢下沉的城市里，我写了封信——寄往比这里更早入冬的地方。有些话再不说，可能就来不及了。",d:'n',h:'更早入冬的地方——往哪边？'},
+  {f:'女儿 · 肯尼亚 · 内罗毕',t:"长颈鹿昨天生了宝宝。我给她取名Jioni——斯瓦希里语的'黄昏'。爸爸说想去看南十字星——告诉他，女儿在这片草原上过得很好。",d:'s',h:'南十字星——在南半球还是北半球能看到？'},
+  {f:'书店老板 · 韩国 · 釜山',t:"海云台的冬天比首尔温柔。我辞了翻译公司的工作，在海边开了小书店。姐姐渡海去了太阳先升起来的那边——帮我把信带给她。就说书店的窗能看见海。",d:'e',h:'太阳先升起来的那边——是哪边？'},
+  {f:'扫墓人 · 墨西哥 · 瓦哈卡',t:"亡灵节到了。整座城被橙色的万寿菊淹没了。这里的人相信——只要记得，死去的人就不会离开。我在墓地想起了你——想起你说过想看海边的日落。帮我把信带过去吧。",d:'w',h:'海边的日落——在哪边能看到？'},
+  {f:'种花人 · 中国 · 大理',t:"苍山的云今天像一条龙。我租了个小院子——打算种花。信要寄到比这里更暖的地方去。记得你说过想来看看。",d:'s',h:'比这里更暖的地方——往哪边走？'},
+  {f:'追光者 · 冰岛 · 雷克雅未克',t:"昨晚极光烧了一整夜——绿的，像谁在天上泼了荧光漆。灭了之后才想起，还没给你写过信。你也看得到极光吧？帮我把信带过去。",d:'n',h:'也看得到极光的地方——在哪边？'},
+  {f:'咖啡师 · 澳大利亚 · 墨尔本',t:"码头边的小店天没亮就开了。第一杯咖啡做好的时候，太阳刚好从海那边升起来——这时候我最想你。",d:'e',h:'太阳从海那边升起来——是哪边？'},
+  {f:'蓝城居民 · 摩洛哥 · 舍夫沙万',t:"整座城都是蓝的。台阶、窗户、花盆——全是蓝的。海风从日落那边吹过来，穿过每一条巷子。今晚撒哈拉那边有流星雨——希望你也看得到。",d:'w',h:'海风从日落那边吹过来——是哪边？'},
+ ],
+ npc:[
+  {nm:'👴 陈教授 · 大学老师',dl:[
+   {s:'npc',t:'"林渡？是你吗？在这片海上……真没想到。"'},
+   {s:'npc',t:'"大三那年，你翻译了叶芝的《当你老了》。用词不太准确，时态也错了两个。但是那种温柔——我教了三十年书，见过几千份作业——那一份我记得最清楚。"'},
+   {s:'npc',t:'"AI 来了以后，很多学生问我：老师，我们学这个还有用吗？我每次都说——AI 可以翻译一切，但它不会为了一个词犹豫整个下午。你会。因为你在乎。"'},
+   {s:'npc',t:'"你在这片海上送信——每一封都逻辑混乱、充满歧义。但正是这些"不完美"，才需要人的温度去读懂。"'},
+   {s:'ask',q:'你想说什么？',o:['「可是老师——我还是经常怀疑自己的价值。」','「您觉得十年后，还需要人工翻译吗？」']},
+   {s:'ans',a:['"怀疑是好事。不怀疑的人要么是天才，要么是傻子——你两样都不是。你只是一个会在意的人。而这个世界最缺的，就是在意的人。"','"需要。不是翻译合同和说明书——是翻译那些说不出口的话：有人写"海"，不是在报告颜色，是在说孤独。有人写"花"，不是在记录花期，是在说来不及。这种翻译——机器永远做不了。"']},
+   {s:'npc',t:'"去吧。这片海上还有很多信在等你。记住——你不是在和 AI 竞争。你在做 AI 做不了的事。"'},
+  ]},
+  {nm:'👩‍💻 同学 · 何岸',dl:[
+   {s:'npc',t:'"嘿！居然在这片海上碰到你！我现在在一家 AI 翻译公司上班——对，就是你想的那种。"'},
+   {s:'npc',t:'"每天的工作是给机器翻译的结果"润色"。说实话，大部分时候机器翻得比我好——更快、更准、还不喊累。"'},
+   {s:'npc',t:'"但上周遇到一个句子——「今晚的月亮真圆啊」。AI 翻成：The moon is very round tonight. ——语法正确。但它不知道，在中国，圆月代表的是团圆。说这句话的人不是在做天文观测——他是在说：我想家了。"'},
+   {s:'npc',t:'"我把 very round 改成了 full，加了一句 Wish you were here. ——AI 觉得多余。但那个收到翻译的人看到的不再是一句「今晚月亮很圆」——而是千里之外的思念。这就是我们存在的意义。"'},
+   {s:'ask',q:'你想问什么？',o:['「你不会焦虑吗？机器越来越强了。」','「那你喜欢这份工作吗？」']},
+   {s:'ans',a:['"当然焦虑啊。每个月都有新的 AI 模型出来。但你知道吗——焦虑归焦虑，每天我还是会盯着屏幕，等那一两句机器搞不定的句子。就那么一两句——够我撑一整天。"','"喜欢。不是喜欢润色——是喜欢在那些冰冷的翻译里找到缝隙，然后把自己塞进去。每一次改完，我都觉得——嗯，这句话现在有人味了。"']},
+   {s:'npc',t:'"你在这片海上做的事——捞起那些信，读懂它们——跟我做的，是一回事。加油，同学。"'},
+  ]},
+  {nm:'📞 母亲 · 无线电来电',dl:[
+   {s:'npc',t:'"喂？是渡渡吗？信号不太好——你那边海浪大不大？我没什么事，就是想问问——吃了没。"'},
+   {s:'npc',t:'"你寄回来的信你爸都收着呢，放在你小时候的书桌上。他说你字写得越来越好看——有笔锋了。你小时候写字像鸡爪子扒的。"'},
+   {s:'npc',t:'"你记不记得——你上小学的时候，老师问大家长大了想做什么。你说你要当"词语的摆渡人"。老师没听懂，回来问我。我说——她想把一种语言里的话，渡到另一种语言里去。"'},
+   {s:'npc',t:'"后来你学了英语专业。再后来 AI 出来了，你在电话里哭过一次——说你学的那些好像没用了。我当时想说很多，但最后只说了一句：那就先回来吃饭。"'},
+   {s:'ask',q:'你想说什么？',o:['「妈……我好像又能做摆渡人了。就在这片海上。」','「可是摆渡人赚不了多少钱啊。」']},
+   {s:'ans',a:['"我知道。你寄回来的每一封信——你爸读完了都沉默一会儿。然后说：咱闺女在做一件了不起的事。你妈不懂翻译，不懂 AI，但你妈知道——能让一个人沉默很久然后叹口气的东西，一定是有用的。"','"你外婆开了一辈子茶馆也没赚什么钱。但她泡的茶——喝过的人到老都记得那个味道。有些东西，不是用钱算的。你赚不了大钱——但你送出去的每一封信，都会有人记得。这就够了。"']},
+   {s:'npc',t:'"好了，信号不太好了——海上风大，你注意安全。记得吃饭。妈挂了。"'},
+  ]},
+ ],
+},en:{
+ title:'Drifting Postman',sub:'漂流信使',
+ intro:['Your name is Lin Du. English major. Senior year.\nYour dorm is buried in four years of notes — Wordsworth, Yeats, Frost.\nYou once believed language was the strongest bridge between people.',
+ 'Then AI arrived.\nFirst it was just news — translation software got better.\nThen job fairs — the publishers who used to fight over English majors were hiring two this year.\nThen — a classmate spent six months translating a manuscript. AI did it in two hours.',
+ 'That night you called your mom.\nYou didn\'t explain — you just cried.\nYou said: Mom, I studied for four years, and it feels like none of it matters.\nAfter a long silence, she said: "Then come home for dinner first."',
+ 'You hung up and sat on your bed.\nWorn-out Wordsworth lay open on your desk.\nYou had memorized every poem in that book.\nBut now they felt weightless — like paper in the wind. You didn\'t know where you were going.',
+ 'Then one night, you dreamed of a sea.\nLetters drifted on the waves — crooked handwriting, broken grammar, messy logic.\nBut every one said the same thing: Deliver me to the right hands.\nAI cannot read these. But you can.',
+ 'You woke up on a small boat.\nIn the distance, golden lights flickered —\nhuman hearts waiting to be understood.'],
+ go:'✨  SET SAIL  ✨',goHint:'👆 Click button  or  press Space/Enter',tut:'🧭 WASD/Arrow keys to sail | SPACE near letters to fish | Choose direction after reading',
+ hL:'📮 Delivered',hT:['🌙 Night','☀️ Dawn','🌤️ Morning','☀️ Noon','🌅 Dusk'],
+ fH:'🎣 Press SPACE to start — aim for the gold zone',fP:'🎣 Press SPACE when the marker hits the gold zone!',fM:'Just missed...',fG:'✨ Got it!',
+ dQ:'📍 Where should this letter go?\n(Read carefully — clues are in the words)',
+ dN:'⬆️ North · Cold lands',dS:'⬇️ South · Warm lands',dE:'➡️ East · Sunrise lands',dW:'⬅️ West · Sunset lands',
+ dOK:'✅ Correct! The letter will reach its destination.',dNO:'🤔 Returned to sender... Read again — there are clues in the words.',dRetry:'Wrong direction. Read again and retry.',
+ iH:'🏝️ Press SPACE to dock',iT:'🏝️ Shore Leave',iC:'(Click to continue)',iR:'What do you want to say?',
+ gate:'⚠️ Someone is waiting — dock and talk before collecting more letters',
+ near:'📮 Nearest letter',
+ endT:'🌅 Night Falls',
+ endL:['Today, you delivered {n} letters.','','Each one written in imperfect grammar, clumsy phrasing —','saying things only a human could say.','','AI can translate everything. But it cannot read —','who is standing behind those words.','','But you can.','Because you are an English major.','You didn\'t just study a language —','you studied other people\'s lives.','','That is why you are on this sea.','','— Drifting Postman'],
+ replay:'🔄 Sail Again',
+ ltr:[
+  {f:'A Fisherman · Valparaíso, Chile',t:"The sea is purple today. I caught three sardines. Maria says if I don't write, she'll sell my boat. She says the sea is even colder where she is — take this letter to her.",d:'n',h:'The sea is colder there — which way gets colder?'},
+  {f:'A Granddaughter · Kyoto, Japan',t:"The cherry blossoms bloomed ten days early. Last year Grandma still knew my name. This year she doesn't. The doctor says take it slow — but flowers don't wait. My sister is in a city that sees the sunrise before mine — take this letter to her. Come home, while the blossoms last.",d:'e',h:'A city that sees sunrise earlier — which way?'},
+  {f:'A Baker · Tromsø, Norway',t:"Forty days of polar night now. I've learned to make cinnamon buns. My neighbor says my Norwegian is getting better — he's just being kind. It's so cold here, even breathing freezes. Send this letter to where summer lives.",d:'s',h:'Where summer lives — which way?'},
+  {f:'A Worker · Cairo, Egypt',t:"The camels still stink. But when the pyramids turn gold, everything is worth it. I've saved enough — I'm going home next year. Home is in the direction where the sun goes down.",d:'w',h:'Where the sun goes down — which way is that?'},
+  {f:'A Venetian · Venice, Italy',t:"The water is rising again. San Marco Square is ankle-deep. From this slowly sinking city, I write a letter — heading where winter comes earlier. Some things must be said before it's too late.",d:'n',h:'Where winter comes earlier — which way?'},
+  {f:'A Daughter · Nairobi, Kenya',t:"The giraffe had her baby yesterday! I named her Jioni — Swahili for 'dusk.' Dad said he wanted to see the Southern Cross. Tell him your daughter is doing just fine on this savanna.",d:'s',h:'The Southern Cross — which hemisphere can you see it from?'},
+  {f:'A Bookseller · Busan, South Korea',t:"Winter in Haeundae is gentler than Seoul. I quit the translation company and opened a tiny bookstore by the sea. My sister crossed the sea to where the sun rises first — take this letter to her. Tell her the bookstore window looks out on the sea.",d:'e',h:'Where the sun rises first — which way?'},
+  {f:'A Mourner · Oaxaca, Mexico',t:"Day of the Dead has arrived. The whole city is buried in orange marigolds. People here believe the dead never really leave — as long as we remember them. At the cemetery I thought of you — you once said you wanted to watch the sunset by the sea. Take this letter there.",d:'w',h:'Sunset by the sea — which way can you see it?'},
+  {f:'A Gardener · Dali, China',t:'"The clouds over Cangshan looked like a dragon today. I rented a small courtyard — I\'m going to grow flowers. This letter is heading somewhere warmer than here. You once said you wanted to come see."',d:'s',h:'Somewhere warmer — which way?'},
+  {f:'An Aurora Chaser · Reykjavík, Iceland',t:'"The aurora burned all night — green, like someone spilled fluorescent paint across the sky. Only after it faded did I realize — I\'ve never written to you. You can see the aurora too, right? Take this letter there."',d:'n',h:'You can see the aurora too — which way?'},
+  {f:'A Barista · Melbourne, Australia',t:'"The little shop by the pier opens before dawn. By the time the first coffee is ready, the sun rises right over the sea — that\'s when I miss you most."',d:'e',h:'The sun rises over the sea — which way?'},
+  {f:'A Resident · Chefchaouen, Morocco',t:'"The whole city is blue. Blue stairs, blue windows, blue flowerpots — every shade of blue. The sea breeze blows in from where the sun sets, through every alley. They say there will be shooting stars tonight over the Sahara. Hope you see them too."',d:'w',h:'The sea breeze blows from where the sun sets — which way?'},
+ ],
+ npc:[
+  {nm:'👴 Professor Chen',dl:[
+   {s:'npc',t:'"Lin Du? Is that you? On this sea... I never expected this."'},
+   {s:'npc',t:'"Junior year — you translated Yeats\' "When You Are Old." The word choices were a bit off, and you got two tenses wrong. But that tenderness — thirty years of teaching, thousands of assignments — yours is the one I remember."'},
+   {s:'npc',t:'"When AI arrived, so many students asked: is there even a point anymore? Every time, I tell them — AI can translate anything. But it will never hesitate over a single word for an entire afternoon. You will. Because you care."'},
+   {s:'npc',t:'"These letters you\'re delivering — every single one is messy, overflowing with ambiguity. But it\'s precisely that imperfection that needs a human\'s warmth to understand."'},
+   {s:'ask',q:'What do you want to say?',o:['"But Professor — I still doubt myself all the time."','"Do you think human translators will still be needed in ten years?"']},
+   {s:'ans',a:['"Doubt is good. People who never doubt are either geniuses or fools — and you\'re neither. You\'re just someone who cares. And the world is desperately short of people who care."','"Yes — but not for contracts and manuals. For the things left unsaid. Every letter on this sea — people write one thing but mean another. When someone writes "the sea," they\'re not reporting a color — they\'re naming their loneliness. When someone writes "blossoms," they\'re not noting the season — they\'re saying time is running out. That kind of translation — machines will never do it."']},
+   {s:'npc',t:'"Go on. There are more letters waiting for you. Remember — you\'re not competing with AI. You\'re doing what AI cannot do."'},
+  ]},
+  {nm:'👩‍💻 He An · Classmate',dl:[
+   {s:'npc',t:'"Hey! Of all the seas in the world, I run into you here! I work at an AI translation company now — yes, exactly the kind you\'re thinking of."'},
+   {s:'npc',t:'"My job is to "polish" machine translations. Honestly? Most of the time the machine does better than me. Faster. More accurate. Never complains."'},
+   {s:'npc',t:'"But last week — a sentence: "今晚的月亮真圆啊." The AI translated: The moon is very round tonight. — Grammatically perfect. But it didn\'t know: in Chinese, a \'round moon\' symbolizes reunion. The person wasn\'t making an astronomy observation — they were saying: I miss home."'},
+   {s:'npc',t:'"I changed \'very round\' to \'full\', and added: Wish you were here. — The AI flagged it as unnecessary padding. But the person receiving that translation won\'t just see a weather report — they\'ll feel the longing from a thousand miles away. That\'s why we\'re here."'},
+   {s:'ask',q:'What do you want to ask?',o:['"Don\'t you get anxious? The machines keep getting stronger."','"Do you actually like this job?"']},
+   {s:'ans',a:['"Of course I get anxious. Every month there\'s a new model. But anxiety and all, I still stare at the screen every day, waiting for those one or two sentences the machine can\'t handle. Just one or two — that\'s enough to keep me going."','"I do. Not the polishing — but finding those cracks in the cold translations and squeezing myself in. Every time I finish an edit, I think — yeah. This sentence has a soul now."']},
+   {s:'npc',t:'"What you\'re doing on this sea — fishing up those letters, reading them, understanding them — it\'s the same thing. Keep going, classmate."'},
+  ]},
+  {nm:'📞 Mom · Radio Call',dl:[
+   {s:'npc',t:'"Hello? Du Du? The signal\'s bad — are the waves strong out there? Nothing important — I just wanted to ask: have you eaten?"'},
+   {s:'npc',t:'"All the letters you\'ve sent — your dad keeps them on your old desk. He says your handwriting is getting better — it has character now. When you were little, it looked like chicken scratch."'},
+   {s:'npc',t:'"Do you remember — in elementary school, the teacher asked everyone what they wanted to be when they grew up. You said: "A ferryman of words." The teacher didn\'t understand. I had to explain."'},
+   {s:'npc',t:'"Later you majored in English. Then AI came along, and you cried on the phone once — saying everything you\'d learned seemed useless. I wanted to say so much. But all I said was: "Then come home for dinner first."'},
+   {s:'ask',q:'What do you want to say?',o:['"Mom... I think I can be a ferryman again. Right here on this sea."','"But a ferryman doesn\'t make much money."']},
+   {s:'ans',a:['"I know. Every letter you\'ve delivered — your dad reads them and sits in silence. Then he says: our daughter is doing something remarkable. Your mom doesn\'t understand translation or AI. But your mom knows — anything that makes someone sit in silence and sigh — that thing has value."','"Your grandmother ran a tea house her whole life and never made much money. But people who drank her tea remembered the taste until they were old. Some things can\'t be measured in money. You won\'t get rich — but every letter you deliver, someone will remember. That\'s enough."']},
+   {s:'npc',t:'"Alright — the signal\'s fading. The sea wind is strong. Be safe. Remember to eat. Mom\'s hanging up now."'},
+  ]},
+ ],
+}};
+
+// Theme mapping: each letter index → theme (same order as ltr array)
+// zh themes: 思念/家人/梦想/记忆
+const letterTheme = [
+ {zh:'思念',en:'longing'},{zh:'家人',en:'family'},{zh:'思念',en:'longing'},
+ {zh:'家人',en:'family'},{zh:'思念',en:'longing'},{zh:'家人',en:'family'},
+ {zh:'家人',en:'family'},{zh:'记忆',en:'memory'},{zh:'梦想',en:'dream'},
+ {zh:'思念',en:'longing'},{zh:'思念',en:'longing'},{zh:'思念',en:'longing'}
+];
+
+let lang='zh';
+function T(p){let v=L[lang];for(const k of p.split('.'))v=v?.[k];return v??p}
+function toggleLang(){lang=lang==='zh'?'en':'zh';document.getElementById('lang-btn').textContent=lang==='zh'?'🌐 EN':'🌐 中文';updateHUD();if(state==='intro')showIntroPanel()}
+window.toggleLang=toggleLang;
+
+const C=document.getElementById('c'),ctx=C.getContext('2d');
+let W=860,H=720;
+let boat={x:0,y:0,vx:0,vy:0,a:0};
+let letters=[],particles=[],islands=[];
+let state='intro';let introStep=0;
+let delivered=0,cl=null,ci=null;
+let fm=0,fd=1,fs=0.018,fa=false,fss=0.35,fse=0.55;
+let tod=2,tt=0,wo=0,ss=0;
+let used=[],delFrom=[],delThemes=[],iv=0,fc=0,gated=false,ds=0;
+const keys={};
+function setK(k,v){keys[k]=v}
+window.setK=setK;
+
+function resize(){
+  W=Math.min(window.innerWidth,860);H=Math.min(window.innerHeight,720);
+  C.width=W;C.height=H;C.style.width=W+'px';C.style.height=H+'px';
+}
+window.addEventListener('resize',resize);resize();
+
+// INPUT
+window.addEventListener('keydown',e=>{
+  keys[e.key]=1;
+  if(state==='intro'&&(e.key===' '||e.key==='Enter')){e.preventDefault();advanceIntro();return;}
+  if(state==='title'&&(e.key===' '||e.key==='Enter')){e.preventDefault();startGame();return;}
+  if(e.key===' '){e.preventDefault();doSpace();}
+});
+window.addEventListener('keyup',e=>{keys[e.key]=0});
+C.addEventListener('click',e=>{
+  if(state==='intro'){advanceIntro();return;}
+  if(state==='title'){startGame();return;}
+  if(state==='sailing')doSpace();
+});
+
+function advanceIntro(){
+  const texts=T('intro');
+  if(!texts)return;
+  introStep++;
+  if(introStep>=texts.length){
+    document.getElementById('overlay').classList.remove('on');
+    document.getElementById('overlay').onclick=null;
+    state='title';
+  }else{
+    showIntroPanel();
+  }
+}
+function showIntroPanel(){
+  const texts=T('intro');
+  if(!texts||introStep>=texts.length)return;
+  const P=document.getElementById('panel'),O=document.getElementById('overlay');
+  P.innerHTML='<p style="font-size:16px;line-height:2;white-space:pre-line;color:#e8d5b0;">'+texts[introStep]+'</p><p class="hint">（点击继续）</p>';
+  O.classList.add('on');
+  O.onclick=function(){
+    introStep++;
+    if(introStep>=texts.length){
+      O.classList.remove('on');O.onclick=null;state='title';
+    }else{showIntroPanel();}
+  };
+}
+
+function doSpace(){
+  if(state==='fishing'&&fa){
+    fa=false;const mid=(fss+fse)/2,tol=(fse-fss)/2+0.06;
+    if(Math.abs(fm-mid)<tol){
+      cl.collected=true;delivered++;updateHUD();
+      document.getElementById('fish-wrap').classList.remove('on');
+      state='reading';showLetter();
+    }else{
+      document.getElementById('fish-p').textContent=T('fM');
+      setTimeout(()=>{
+        document.getElementById('fish-wrap').classList.remove('on');
+        if(cl&&!cl.collected){cl.vy-=1;cl.vx+=(Math.random()-0.5)*1}
+        cl=null;state='sailing';
+        if(letters.filter(l=>!l.collected).length===0&&!gated)spawnLetter();
+      },900);
+    }
+    return;
+  }
+  if(state==='sailing'){
+    for(const isl of islands){if(!isl.vis&&dist(boat.x,boat.y,isl.x,isl.y)<80){visitIsland(isl);return}}
+    if(!gated){
+      let n=null,nd=80;
+      for(const l of letters){if(!l.collected){const d=dist(boat.x,boat.y,l.x,l.y);if(d<nd){nd=d;n=l}}}
+      if(n){startFishing(n);return}
+    }
+  }
+}
+
+function spawnLetter(near){
+  const all=T('ltr');if(!Array.isArray(all))return;
+  let av=all.map((_,i)=>i).filter(i=>!used.includes(i));
+  if(av.length===0){used=[];av=all.map((_,i)=>i)}
+  const ri=av[Math.floor(Math.random()*av.length)];used.push(ri);
+  let x,y,vx,vy;
+  if(near){const ang=Math.random()*Math.PI*2,d=150+Math.random()*300;x=Math.max(60,Math.min(W-60,boat.x+Math.cos(ang)*d));y=Math.max(60,Math.min(H-60,boat.y+Math.sin(ang)*d));vx=(Math.random()-0.5)*0.25;vy=(Math.random()-0.5)*0.25}
+  else{const e=Math.floor(Math.random()*4),m=50;switch(e){case 0:x=m+Math.random()*(W-m*2);y=30;vx=(Math.random()-0.5)*0.25;vy=Math.random()*0.2+0.05;break;case 1:x=W-30;y=m+Math.random()*(H-m*2);vx=-(Math.random()*0.2+0.05);vy=(Math.random()-0.5)*0.25;break;case 2:x=m+Math.random()*(W-m*2);y=H-30;vx=(Math.random()-0.5)*0.25;vy=-(Math.random()*0.2+0.05);break;case 3:x=30;y=m+Math.random()*(H-m*2);vx=Math.random()*0.2+0.05;vy=(Math.random()-0.5)*0.25;break}}
+  letters.push({x,y,vx,vy,g:Math.random()*Math.PI*2,collected:false,ri});
+}
+function spawnIsland(){
+  for(let a=0;a<30;a++){const x=100+Math.random()*(W-200),y=120+Math.random()*(H-240);let tc=false;for(const i of islands){if(dist(x,y,i.x,i.y)<200)tc=true}if(dist(x,y,boat.x,boat.y)<150)tc=true;if(!tc){islands.push({x,y,vis:false,ni:islands.length%3,gs:false,rc:-1,ph:0});return}}
+}
+
+function startFishing(l){state='fishing';cl=l;fm=Math.random();fd=Math.random()>0.5?1:-1;fs=0.015+Math.random()*0.02;fss=0.25+Math.random()*0.25;fse=fss+0.1+Math.random()*0.15;if(fse>0.88)fse=0.88;fa=true;document.getElementById('fish-wrap').classList.add('on');document.getElementById('fish-p').textContent=T('fP');updateFishBar();ss=3}
+function updateFishBar(){if(!fa)return;document.getElementById('fish-z').style.left=(fss*100)+'%';document.getElementById('fish-z').style.width=((fse-fss)*100)+'%';document.getElementById('fish-m').style.left=(fm*100)+'%'}
+
+function showLetter(){
+  const all=T('ltr'),data=all?.[cl?.ri];if(!data)return;
+  const P=document.getElementById('panel'),O=document.getElementById('overlay');
+  var h='<p class=\"sub\">'+(lang==='zh'?'📮 信件来自：':'📮 From: ')+data.f+'</p>';
+  h+='<p class=\"lt\">'+data.t+'</p>';
+  h+='<p style=\"color:#f0c878;font-size:14px;margin-top:18px;\">'+T('dQ')+'</p>';
+  h+='<div class=\"btns\">';
+  h+='<button onclick=\"chooseDir(&#39;n&#39;)\">⬆️ '+T('dN')+'</button>';
+  h+='<button onclick=\"chooseDir(&#39;s&#39;)\">⬇️ '+T('dS')+'</button>';
+  h+='<button onclick=\"chooseDir(&#39;e&#39;)\">➡️ '+T('dE')+'</button>';
+  h+='<button onclick=\"chooseDir(&#39;w&#39;)\">⬅️ '+T('dW')+'</button>';
+  h+='</div>';
+  P.innerHTML=h;
+  O.classList.add('on');O.onclick=null;
+}
+function chooseDir(dir){
+  var all=T('ltr'),data=all?.[cl?.ri],correct=data?.d;
+  var P=document.getElementById('panel'),O=document.getElementById('overlay');
+  if(dir===correct){
+    P.innerHTML='<h2>✅</h2><p style=\"color:#f0c878;font-size:16px;\">'+T('dOK')+'</p><p class=\"hint\">（点击继续航行）</p>';
+    if(data&&data.f&&delFrom.indexOf(data.f)===-1){delFrom.push(data.f);if(cl&&cl.ri!=null){const th=letterTheme[cl.ri];if(th){const tv=th[lang]||th.zh;if(delThemes.indexOf(tv)===-1)delThemes.push(tv)}}}
+    addBurst(cl.x,cl.y,'#f0c878',25);
+    O.onclick=function(){
+      O.classList.remove('on');O.onclick=null;cl=null;state='sailing';
+      if(letters.filter(function(l){return !l.collected}).length<2&&!gated&&used.length<12)spawnLetter();
+      if(delivered>=4&&islands.length<1)spawnIsland();
+      if(delivered>=8&&islands.length<2)spawnIsland();
+      if(delivered>=12&&islands.length<3)spawnIsland();
+      checkGate();
+      if(delivered>=12&&iv>=3)setTimeout(function(){if(state==='sailing'){state='complete';showComplete()}},2500);
+    };
+  }else{
+    var h='<p class=\"sub\">'+(lang==='zh'?'📮 信件来自：':'📮 From: ')+data.f+'</p>';
+    h+='<p class=\"lt\">'+data.t+'</p>';
+    h+='<h2>❌</h2><p style=\"color:#ff9090;font-size:15px;\">'+T('dRetry')+'</p>';
+    if(data.h){h+='<p style=\"color:#90c8b8;font-size:13px;margin-top:6px;font-style:italic;\">💡 '+data.h+'</p>';}
+    h+='<p style=\"color:#f0c878;font-size:14px;margin-top:14px;\">'+T('dQ')+'</p>';
+    h+='<div class=\"btns\">';
+    h+='<button onclick=\"chooseDir(&#39;n&#39;)\">⬆️ '+T('dN')+'</button>';
+    h+='<button onclick=\"chooseDir(&#39;s&#39;)\">⬇️ '+T('dS')+'</button>';
+    h+='<button onclick=\"chooseDir(&#39;e&#39;)\">➡️ '+T('dE')+'</button>';
+    h+='<button onclick=\"chooseDir(&#39;w&#39;)\">⬅️ '+T('dW')+'</button>';
+    h+='</div>';
+    P.innerHTML=h;
+    O.onclick=null;
+  }
+}
+window.chooseDir=chooseDir;
+
+function checkGate(){const uv=islands.filter(i=>!i.vis);if(uv.length>0){gated=true;document.getElementById('gate').style.display='block';if(delivered>=12){document.getElementById('gate').textContent=lang==='zh'?'🏁 最后一站——靠岸吧，没有信要收了。':'🏁 Final stop — come ashore. No more letters.'}else{document.getElementById('gate').textContent=T('gate')}}else{gated=false;document.getElementById('gate').style.display='none'}}
+
+function visitIsland(isl){isl.vis=true;ci=isl;iv++;ds=0;state='island';showDialogue()}
+function showDialogue(){
+  const isl=ci;if(!isl)return;const npc=T('npc')[isl.ni];if(!npc)return;const dl=npc.dl;
+  const P=document.getElementById('panel'),O=document.getElementById('overlay');
+  if(ds<dl.length){const d=dl[ds];
+    if(d.s==='npc'){P.innerHTML=`<h2>${T('iT')}</h2><p class="nm">${npc.nm}</p><p>${d.t}</p><p class="hint">${T('iC')}</p>`;O.onclick=()=>{ds++;showDialogue()}}
+    else if(d.s==='ask'){P.innerHTML=`<h2>${T('iT')}</h2><p class="nm">${npc.nm}</p><p style="color:#90c8b8;margin:10px 0;">${d.q}</p><div class="btns">${d.o.map((o,i)=>`<button onclick="chooseDialogue(${i});event.stopPropagation()">${o}</button>`).join('')}</div>`;O.onclick=null}
+    else if(d.s==='ans'){const ri=isl.rc>=0?isl.rc:0;P.innerHTML=`<h2>${T('iT')}</h2><p class="nm">${npc.nm}</p><p>${d.a[ri]}</p><p class="hint">${T('iC')}</p>`;O.onclick=()=>{ds++;showDialogue()}}
+  }else{
+    P.innerHTML=`<h2>${T('iT')}</h2><p class="nm">${npc.nm}</p><p style="color:#a0d0b0;">—— 对话结束 ——</p><p class="hint">（点击回到海上）</p>`;
+    O.onclick=()=>{O.classList.remove('on');O.onclick=null;ci=null;state='sailing';checkGate();if(!gated&&letters.filter(l=>!l.collected).length<2)spawnLetter();if(delivered>=12&&iv>=3)setTimeout(()=>{if(state==='sailing'){state='complete';showComplete()}},2500)}
+  }
+  O.classList.add('on');
+}
+function chooseDialogue(i){if(!ci)return;ci.rc=i;ds++;showDialogue()}
+window.chooseDialogue=chooseDialogue;
+
+function showComplete(){
+  var P=document.getElementById('panel'),O=document.getElementById('overlay');
+  if(lang==='zh'){
+    P.innerHTML='<h2>🏁</h2><p style="color:#f0c878;font-size:18px;">所有信件已送达</p><p style="color:#c8c0b0;line-height:2;">十二封信，十二段人生。<br>你读懂了每一封——<br>那些AI永远读不懂的，人类的心。</p><p class="hint">（点击查看总结）</p>';
+  }else{
+    P.innerHTML='<h2>🏁</h2><p style="color:#f0c878;font-size:18px;">All Letters Delivered</p><p style="color:#c8c0b0;line-height:2;">Twelve letters. Twelve lives.<br>You understood every one —<br>the human hearts AI can never read.</p><p class="hint">(Click to see summary)</p>';
+  }
+  O.classList.add('on');
+  O.onclick=function(){
+    O.classList.remove('on');O.onclick=null;state='ending';showEnding();
+  };
+}
+function showEnding(){
+  var P=document.getElementById('panel'),O=document.getElementById('overlay');
+  var html='<h2>'+T('endT')+'</h2>';
+  var lines=T('endL');
+  for(var i=0;i<lines.length;i++){
+    var line=lines[i];
+    if(line){html+='<p>'+line.replace('{n}',String(delivered))+'</p>';}
+    else{html+='<br>';}
+  }
+  // Dynamic theme reflection
+  if(delThemes.length>0){
+    if(lang==='zh'){
+      html+='<p style="color:#f0c878;font-size:14px;margin-top:10px;">这些信——关于'+delThemes.join('、')+'——<br>关于AI永远翻译不出的那些东西。</p>';
+    }else{
+      html+='<p style="color:#f0c878;font-size:14px;margin-top:10px;">These letters — about '+delThemes.join(', ')+' —<br>about the things AI will never translate.</p>';
+    }
+  }
+  html+='<button class=\"big\" onclick=\"restartGame()\" style=\"margin-top:16px;\">'+T('replay')+'</button>';
+  P.innerHTML=html;
+  O.classList.add('on');O.onclick=null;
+}
+function restartGame(){
+  document.getElementById('overlay').classList.remove('on');document.getElementById('overlay').onclick=null;
+  document.getElementById('fish-wrap').classList.remove('on');document.getElementById('gate').style.display='none';
+  boat={x:W/2,y:H/2,vx:0,vy:0,a:0};letters=[];particles=[];islands=[];used=[];delFrom=[];delThemes=[];delivered=0;cl=null;ci=null;iv=0;
+  fa=false;gated=false;tod=2;tt=0;introStep=0;state='sailing';updateHUD();spawnLetter(true);spawnLetter(true);
+}
+window.restartGame=restartGame;
+
+function updateHUD(){document.getElementById('h1').textContent=`${T('hL')}: ${delivered}`;document.getElementById('h2').textContent=T('hT')[tod]}
+function addBurst(x,y,color,count){for(let i=0;i<count;i++){const a=Math.random()*Math.PI*2,s=1+Math.random()*3;particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:25+Math.random()*30,color,size:2+Math.random()*3})}}
+
+function startGame(){
+  state='sailing';boat.x=W/2;boat.y=H/2;boat.vx=0;boat.vy=0;delivered=0;delFrom=[];
+  letters=[];islands=[];used=[];iv=0;gated=false;updateHUD();spawnLetter(true);spawnLetter(true);
+}
+window.startGame=startGame;
+
+function update(){
+  fc++;wo+=0.015;if(ss>0)ss*=0.88;tt++;if(tt>3000){tt=0;tod=(tod+1)%5;updateHUD()}
+  if(state==='sailing'||state==='fishing'){
+    let ax=0,ay=0;
+    if(keys['ArrowLeft']||keys['a'])ax=-0.22;
+    if(keys['ArrowRight']||keys['d'])ax=0.22;
+    if(keys['ArrowUp']||keys['w'])ay=-0.22;
+    if(keys['ArrowDown']||keys['s'])ay=0.22;
+    boat.vx+=ax;boat.vy+=ay;boat.vx*=0.94;boat.vy*=0.94;
+    const nx=boat.x+boat.vx,ny=boat.y+boat.vy;
+    let blocked=false;
+    for(const i of islands){if(dist(nx,ny,i.x,i.y)<38){blocked=true;break}}
+    if(nx<15||nx>W-15||ny<15||ny>H-15)blocked=true;
+    if(!blocked){boat.x=nx;boat.y=ny}else{boat.vx*=-0.3;boat.vy*=-0.3}
+    boat.x=Math.max(15,Math.min(W-15,boat.x));boat.y=Math.max(15,Math.min(H-15,boat.y));
+    if(Math.abs(boat.vx)>0.02||Math.abs(boat.vy)>0.02)boat.a=Math.atan2(boat.vy,boat.vx);
+  }
+  if(state==='fishing'&&fa){fm+=fs*fd;if(fm>=1){fm=1;fd=-1;fs=0.015+Math.random()*0.025}if(fm<=0){fm=0;fd=1;fs=0.015+Math.random()*0.025}updateFishBar()}
+  for(const l of letters){if(!l.collected){l.x+=l.vx;l.y+=l.vy;l.g+=0.04;if(l.x<30||l.x>W-30)l.vx*=-1;if(l.y<30||l.y>H-30)l.vy*=-1;l.x=Math.max(30,Math.min(W-30,l.x));l.y=Math.max(30,Math.min(H-30,l.y))}else{l.y-=0.5;l.x+=l.vx*0.5;l.y+=l.vy*0.5}}
+  letters=letters.filter(l=>l.y>-300&&l.y<H+300&&l.x>-300&&l.x<W+300);
+  const ac=letters.filter(l=>!l.collected).length;
+  if(ac<2&&state==='sailing'&&!gated&&used.length<12)spawnLetter();
+  if(state==='sailing'&&fc%120===0)checkGate();
+  for(const p of particles){p.x+=p.vx;p.y+=p.vy;p.life--}
+  particles=particles.filter(p=>p.life>0);
+  if(state==='sailing'&&fc%3===0&&(Math.abs(boat.vx)>0.08||Math.abs(boat.vy)>0.08)){particles.push({x:boat.x-Math.cos(boat.a)*14+(Math.random()-0.5)*8,y:boat.y-Math.sin(boat.a)*14+(Math.random()-0.5)*8,vx:(Math.random()-0.5)*0.2,vy:(Math.random()-0.5)*0.2,life:18+Math.random()*14,color:'rgba(180,210,240,0.35)',size:1+Math.random()*2})}
+}
+
+function render(){
+  const sx=ss*(Math.random()-0.5)*5,sy=ss*(Math.random()-0.5)*5;
+  ctx.save();ctx.translate(sx,sy);
+
+  const sc=[['#0a1226','#0d1b30'],['#152238','#203a55'],['#2a5070','#5a90b0'],['#c07050','#e0a870'],['#0d1b2a','#162840']];
+  const sky=sc[tod];
+  const sg=ctx.createLinearGradient(0,0,0,H);sg.addColorStop(0,sky[0]);sg.addColorStop(1,sky[1]);
+  ctx.fillStyle=sg;ctx.fillRect(0,0,W,H);
+  const sunX=W*0.72,sunY=tod===2?H*0.12:tod===3?H*0.25:tod===4?H*0.35:H*0.18;
+  ctx.fillStyle=tod>=3?'rgba(255,180,100,0.3)':tod<=1?'rgba(200,220,255,0.18)':'rgba(255,240,200,0.22)';
+  ctx.beginPath();ctx.arc(sunX,sunY,32,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=tod>=3?'rgba(255,150,50,0.45)':tod<=1?'rgba(220,240,255,0.28)':'rgba(255,250,230,0.35)';
+  ctx.beginPath();ctx.arc(sunX,sunY,20,0,Math.PI*2);ctx.fill();
+  if(tod===0||tod===4)for(let i=0;i<35;i++){const sx2=(i*137+50)%W,sy2=(i*89+30)%(H*0.38),tw=0.25+Math.sin(fc*0.03+i)*0.3;ctx.fillStyle=`rgba(255,255,220,${tw})`;ctx.beginPath();ctx.arc(sx2,sy2,1,0,Math.PI*2);ctx.fill()}
+
+  // Ocean
+  for(let y=H*0.42;y<H;y+=24){const a=0.07+(y-H*0.42)/H*0.35;ctx.strokeStyle=`rgba(80,140,180,${a})`;ctx.lineWidth=1;ctx.beginPath();for(let x=0;x<W;x+=4){const wy=y+Math.sin(x*0.018+wo+y*0.008)*5;if(x===0)ctx.moveTo(x,wy);else ctx.lineTo(x,wy)}ctx.stroke()}
+  const wg=ctx.createLinearGradient(0,H*0.42,0,H);wg.addColorStop(0,'rgba(15,40,65,0.22)');wg.addColorStop(0.5,'rgba(10,30,50,0.4)');wg.addColorStop(1,'rgba(5,18,35,0.6)');ctx.fillStyle=wg;ctx.fillRect(0,H*0.42,W,H*0.58);
+
+  // Islands
+  for(const isl of islands){ctx.fillStyle='#3a5e3a';ctx.beginPath();ctx.arc(isl.x,isl.y,32,0,Math.PI*2);ctx.fill();ctx.fillStyle='#5a7e3a';ctx.beginPath();ctx.arc(isl.x,isl.y-5,26,0,Math.PI*2);ctx.fill();ctx.fillStyle='#2a4a2a';ctx.beginPath();ctx.arc(isl.x+4,isl.y-22,13,0,Math.PI*2);ctx.fill();ctx.fillStyle='#4a6e3a';ctx.beginPath();ctx.arc(isl.x+4,isl.y-26,9,0,Math.PI*2);ctx.fill();ctx.fillStyle='#c8a070';ctx.fillRect(isl.x-10,isl.y-12,11,11);ctx.fillStyle='#9a7040';ctx.beginPath();ctx.moveTo(isl.x-12,isl.y-12);ctx.lineTo(isl.x-4,isl.y-20);ctx.lineTo(isl.x+4,isl.y-12);ctx.fill();if(!isl.vis){const g=0.35+Math.sin(fc*0.04)*0.3;ctx.fillStyle=`rgba(255,200,120,${g})`;ctx.beginPath();ctx.arc(isl.x,isl.y,48,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(255,255,255,0.6)';ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.fillText('🏝️ ?',isl.x,isl.y-40)}}
+
+  // Letters
+  for(const l of letters){if(l.collected)continue;const g=0.5+Math.sin(l.g)*0.35;ctx.fillStyle=`rgba(240,200,100,${g*0.4})`;ctx.beginPath();ctx.arc(l.x,l.y,30,0,Math.PI*2);ctx.fill();ctx.fillStyle=`rgba(255,220,130,${g*0.3})`;ctx.beginPath();ctx.arc(l.x,l.y,24,0,Math.PI*2);ctx.fill();ctx.fillStyle=`rgba(255,235,180,${g*0.95})`;ctx.fillRect(l.x-14,l.y-10,28,20);ctx.fillStyle=`rgba(240,215,155,${g*0.9})`;ctx.beginPath();ctx.moveTo(l.x-14,l.y-10);ctx.lineTo(l.x,l.y+3);ctx.lineTo(l.x+14,l.y-10);ctx.fill();ctx.fillStyle='rgba(255,255,200,0.85)';ctx.font='10px sans-serif';ctx.fillText('✨',l.x+16,l.y-13+Math.sin(fc*0.1)*3)}
+
+  // Boat
+  ctx.save();ctx.translate(boat.x,boat.y);ctx.rotate(boat.a);
+  ctx.fillStyle='rgba(180,215,240,0.2)';ctx.beginPath();ctx.arc(-16,0,11,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#6B4226';ctx.beginPath();ctx.moveTo(16,0);ctx.lineTo(-10,-10);ctx.lineTo(-16,0);ctx.lineTo(-10,10);ctx.closePath();ctx.fill();ctx.strokeStyle='#4a2a14';ctx.lineWidth=1.2;ctx.stroke();
+  ctx.fillStyle='#F8F2E8';ctx.beginPath();ctx.moveTo(0,-3);ctx.lineTo(5,-22);ctx.lineTo(-8,-22);ctx.lineTo(-3,-3);ctx.closePath();ctx.fill();ctx.strokeStyle='#d0c8b8';ctx.lineWidth=1;ctx.stroke();
+  ctx.strokeStyle='#4a3020';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,3);ctx.lineTo(0,-24);ctx.stroke();
+  ctx.fillStyle='#E8A070';ctx.beginPath();ctx.moveTo(0,-24);ctx.lineTo(10,-19);ctx.lineTo(0,-14);ctx.fill();
+  ctx.restore();
+
+  // Proximity
+  if(state==='sailing'){for(const l of letters){if(!l.collected){const d=dist(boat.x,boat.y,l.x,l.y);if(d<90){ctx.strokeStyle=`rgba(240,200,100,${0.55-(d/90)*0.35})`;ctx.lineWidth=1.5;ctx.setLineDash([4,4]);ctx.beginPath();ctx.arc(l.x,l.y,38,0,Math.PI*2);ctx.stroke();ctx.setLineDash([])}if(d<75){ctx.fillStyle='rgba(255,255,255,0.85)';ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.fillText(T('fH'),l.x,l.y-32)}}}for(const isl of islands){if(!isl.vis){const d=dist(boat.x,boat.y,isl.x,isl.y);if(d<100){ctx.strokeStyle=`rgba(180,255,160,${0.45-(d/100)*0.3})`;ctx.lineWidth=1.5;ctx.setLineDash([4,4]);ctx.beginPath();ctx.arc(isl.x,isl.y,52,0,Math.PI*2);ctx.stroke();ctx.setLineDash([])}if(d<85){ctx.fillStyle='rgba(255,255,255,0.85)';ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.fillText(T('iH'),isl.x,isl.y-46)}}}let n=null,nd=Infinity;for(const l of letters){if(!l.collected){const d=dist(boat.x,boat.y,l.x,l.y);if(d<nd){nd=d;n=l}}}if(n&&nd>110){const a=Math.atan2(n.y-boat.y,n.x-boat.x);ctx.fillStyle='rgba(240,200,120,0.6)';ctx.font='18px sans-serif';ctx.textAlign='center';ctx.fillText('📮',boat.x+Math.cos(a)*52,boat.y+Math.sin(a)*52);ctx.fillStyle='rgba(240,200,120,0.45)';ctx.font='10px sans-serif';ctx.fillText(T('near'),boat.x+Math.cos(a)*52,boat.y+Math.sin(a)*52-18)}}
+
+  if(state==='sailing'){const p=(fc%150)/150;ctx.strokeStyle=`rgba(255,255,255,${0.12*(1-p)})`;ctx.lineWidth=1;ctx.beginPath();ctx.arc(boat.x,boat.y,40+p*60,0,Math.PI*2);ctx.stroke()}
+
+  for(const p of particles){const a=p.life/50;ctx.fillStyle=p.color.replace('0.35',String(a)).replace('0.4',String(a));ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill()}
+
+  ctx.restore();
+
+  // === TITLE ===
+  if(state==='title'){
+    ctx.fillStyle='#0a1628';ctx.fillRect(0,0,W,H);
+    const bx=W/2+Math.sin(fc*0.025)*40,by=H/2-100;
+    ctx.save();ctx.translate(bx,by);ctx.rotate(Math.sin(fc*0.035)*0.12);
+    ctx.fillStyle='#6B4226';ctx.beginPath();ctx.moveTo(12,0);ctx.lineTo(-7,-8);ctx.lineTo(-12,0);ctx.lineTo(-7,8);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#F5F0E8';ctx.beginPath();ctx.moveTo(0,-2);ctx.lineTo(4,-16);ctx.lineTo(-6,-16);ctx.lineTo(-2,-2);ctx.closePath();ctx.fill();
+    ctx.restore();
+    ctx.fillStyle='#f0c878';ctx.font='bold 36px "Segoe UI","PingFang SC",sans-serif';ctx.textAlign='center';ctx.fillText(T('title'),W/2,H/2-52);
+    ctx.fillStyle='#c8b080';ctx.font='14px sans-serif';ctx.fillText(T('sub'),W/2,H/2-18);
+    const btnY=H/2+30,btnW=160,btnH=48,pulse=1+Math.sin(fc*0.05)*0.06;
+    function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath()}
+    ctx.fillStyle='rgba(240,180,100,0.3)';rr(W/2-btnW/2-2,btnY-2,btnW+4,btnH+4,26);ctx.fill();
+    const bG=ctx.createLinearGradient(0,btnY,0,btnY+btnH);bG.addColorStop(0,'rgba(240,200,120,0.3)');bG.addColorStop(1,'rgba(200,150,80,0.2)');
+    ctx.fillStyle=bG;ctx.save();ctx.translate(W/2,btnY+btnH/2);ctx.scale(pulse,pulse);ctx.translate(-W/2,-(btnY+btnH/2));
+    rr(W/2-btnW/2,btnY,btnW,btnH,24);ctx.fill();ctx.strokeStyle='rgba(240,200,120,0.6)';ctx.lineWidth=2;ctx.stroke();ctx.restore();
+    ctx.fillStyle='#ffe8b0';ctx.font='bold 18px sans-serif';ctx.fillText(T('go'),W/2,btnY+31);
+    ctx.fillStyle='rgba(240,200,120,0.7)';ctx.font='bold 14px sans-serif';ctx.fillText(T('goHint'),W/2,btnY+72);
+    var tutLines=T('tut').split(' | ');
+    var tutY=btnY+108,tutPH=tutLines.length*24+18,tutPW=Math.min(W-44,520);
+    ctx.fillStyle='rgba(10,22,40,0.75)';
+    ctx.strokeStyle='rgba(240,200,120,0.3)';ctx.lineWidth=1.5;
+    rr(W/2-tutPW/2,tutY-8,tutPW,tutPH,12);ctx.fill();ctx.stroke();
+    ctx.fillStyle='rgba(240,210,140,0.95)';ctx.font='bold 15px "Segoe UI","PingFang SC",sans-serif';
+    for(var li=0;li<tutLines.length;li++)ctx.fillText(tutLines[li],W/2,tutY+li*24+16);
+  }
+}
+
+function gameLoop(){update();render();requestAnimationFrame(gameLoop)}
+function dist(x1,y1,x2,y2){return Math.sqrt((x2-x1)**2+(y2-y1)**2)}
+updateHUD();showIntroPanel();gameLoop();
+</script>
+</body>
+</html>
